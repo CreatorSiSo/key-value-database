@@ -2,25 +2,27 @@ use std::collections::HashMap;
 use std::fs;
 
 fn main() {
-  let arguments = std::env::args().skip(1);
-  let mut database = Database::new("👀").expect("Could not read database file '👀.db'");
+  let mut arguments = std::env::args().skip(1);
+  let database_name = arguments
+    .next()
+    .expect("No database to be edited was provided!");
 
-  arguments
-    .map(|argument| {
-      let (key, value) = argument.split_once(":").unwrap_or_default();
-      (key.to_owned(), value.to_owned())
-    })
-    .for_each(|pair| {
-      database.data.insert(pair.0, pair.1);
-    });
+  let mut database = Database::new(&database_name)
+    .expect(format!("Could not create database '{database_name}'").as_str());
+
+  for argument in arguments {
+    if let Some((key, value)) = string_to_key_value_pair(&argument, ":") {
+      database.data.insert(key, value);
+    }
+  }
 
   std::process::exit(match database.save() {
     Ok(()) => {
-      println!("Saved store successfully.");
+      println!("Saved database successfully.");
       0
     }
     Err(error) => {
-      eprintln!("Could not save store '{}': {}", database.name, error);
+      eprintln!("Could not save database '{}': {}", database.name, error);
       1
     }
   });
@@ -35,12 +37,12 @@ struct Database {
 impl Database {
   fn new(name: &str) -> Result<Database, std::io::Error> {
     let file_content = fs::read_to_string(format!("{}.db", name))?;
-    let mut data = HashMap::default();
 
+    // Convert String into a HashMap
+    let mut data = HashMap::default();
     for line in file_content.lines() {
-      if line.contains("\t") {
-        let (key, value) = line.split_once("\t").unwrap_or_default();
-        data.insert(String::from(key), String::from(value));
+      if let Some((key, value)) = string_to_key_value_pair(line, "\t") {
+        data.insert(key, value);
       }
     }
 
@@ -53,10 +55,22 @@ impl Database {
   fn save(&self) -> Result<(), std::io::Error> {
     let mut content = String::default();
 
-    for pair in &self.data {
-      content.push_str(format!("{}\t{}\n", pair.0, pair.1).as_str());
+    // Convert HashMap into a String
+    for (key, value) in &self.data {
+      content.push_str(format!("{}\t{}\n", key, value).as_str());
     }
 
     fs::write(format!("{}.db", self.name), content)
   }
+}
+
+fn string_to_key_value_pair(string: &str, seperator: &str) -> Option<(String, String)> {
+  if let Some((key, value)) = string.split_once(seperator) {
+    if key.trim().is_empty() {
+      return None;
+    }
+    return Some((key.to_owned(), value.to_owned()));
+  }
+
+  None
 }
